@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pencatatan Pemakaian Roll</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; overflow-x: hidden; }
+        .welcome-slide { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; justify-content: center; align-items: center; z-index: 1000; animation: slideIn 1s ease-out; }
+        .welcome-content { text-align: center; padding: 20px; }
+        .welcome-content h1 { font-size: 3em; margin-bottom: 10px; }
+        .welcome-content p { font-size: 1.5em; margin-bottom: 20px; }
+        .welcome-content button { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1.2em; }
+        .welcome-content button:hover { background: #218838; }
+        @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+        .app-container { display: none; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        form label { font-weight: bold; }
+        form input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
+        form button { grid-column: span 2; padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        form button:hover { background: #218838; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; overflow-x: auto; display: block; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap; }
+        th { background-color: #f2f2f2; }
+        .action-btn { padding: 5px 10px; margin: 2px; border: none; border-radius: 4px; cursor: pointer; }
+        .edit-btn { background: #ffc107; color: white; }
+        .delete-btn { background: #dc3545; color: white; }
+        .chart-container { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 20px; }
+        .chart { flex: 1; min-width: 300px; }
+        .export-btn { margin-top: 20px; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .export-btn:hover { background: #0056b3; }
+        /* Responsif untuk HP */
+        @media (max-width: 768px) {
+            form { grid-template-columns: 1fr; }
+            form button { grid-column: span 1; }
+            .chart-container { flex-direction: column; }
+            .welcome-content h1 { font-size: 2em; }
+            .welcome-content p { font-size: 1.2em; }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="welcomeSlide" class="welcome-slide">
+        <div class="welcome-content">
+            <h1>Selamat Datang!</h1>
+            <p>Aplikasi Pencatatan Pemakaian Roll</p>
+            <button onclick="enterApp()">Masuk Aplikasi</button>
+        </div>
+    </div>
+    
+    <div id="appContainer" class="app-container">
+        <div class="container">
+            <h1>Aplikasi Pencatatan Pemakaian Roll</h1>
+            <form id="rollForm">
+                <label for="lot">Lot:</label>
+                <input type="text" id="lot" required>
+                
+                <label for="supplier">Supplier:</label>
+                <input type="text" id="supplier" required>
+                
+                <label for="mesin">Mesin:</label>
+                <input type="text" id="mesin" required>
+                
+                <label for="counter">Counter Ganti Roll:</label>
+                <input type="text" id="counter" required>
+                
+                <label for="waktuMulai">Waktu Mulai (Roll Dipasang):</label>
+                <input type="datetime-local" id="waktuMulai" required>
+                
+                <button type="submit" id="submitBtn">Simpan Catatan</button>
+            </form>
+            
+            <h2>Daftar Catatan</h2>
+            <div style="overflow-x: auto;">
+                <table id="catatanTable">
+                    <thead>
+                        <tr>
+                            <th>Lot</th>
+                            <th>Supplier</th>
+                            <th>Mesin</th>
+                            <th>Counter Ganti Roll</th>
+                            <th>Waktu Mulai</th>
+                            <th>Waktu Habis</th>
+                            <th>Durasi (Jam)</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="catatanBody">
+                        <!-- Data akan ditambahkan di sini -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <button class="export-btn" onclick="exportToCSV()">Export ke CSV</button>
+            
+            <div class="chart-container">
+                <div class="chart">
+                    <h2>Grafik Pemakaian Roll per Mesin</h2>
+                    <canvas id="rollChartMesin"></canvas>
+                </div>
+                <div class="chart">
+                    <h2>Grafik Pemakaian Roll per Supplier</h2>
+                    <canvas id="rollChartSupplier"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let editIndex = -1; // Indeks untuk edit
+        
+        // Fungsi untuk masuk aplikasi
+        function enterApp() {
+            document.getElementById('welcomeSlide').style.display = 'none';
+            document.getElementById('appContainer').style.display = 'block';
+            loadData();
+        }
+        
+        // Fungsi untuk menghitung durasi dalam jam
+        function calculateDuration(start, end) {
+            if (!end) return '-';
+            const startTime = new Date(start);
+            const endTime = new Date(end);
+            const diffMs = endTime - startTime;
+            const diffHours = diffMs / (1000 * 60 * 60);
+            return diffHours.toFixed(2);
+        }
+        
+        // Fungsi untuk memuat data dari localStorage
+        function loadData() {
+            const data = JSON.parse(localStorage.getItem('rollData')) || [];
+            const tbody = document.getElementById('catatanBody');
+            tbody.innerHTML = '';
+            data.forEach((item, index) => {
+                const durasi = calculateDuration(item.waktuMulai, item.waktuHabis);
+                const row = `<tr>
+                    <td>${item.lot}</td>
+                    <td>${item.supplier}</td>
+                    <td>${item.mesin}</td>
+                    <td>${item.counter}</td>
+                    <td>${item.waktuMulai}</td>
+                    <td>${item.waktuHabis || '-'}</td>
+                    <td>${durasi}</td>
+                    <td>
+                        <button class="action-btn edit-btn" onclick="editEntry(${index})">Edit</button>
+                        <button class="action-btn delete-btn" onclick="deleteEntry(${index})">Hapus</button>
+                    </td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+            updateCharts(data);
+        }
+        
+        // Fungsi untuk menyimpan atau update data
+        document.getElementById('rollForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const lot = document.getElementById('lot').value;
+            const supplier = document.getElementById('supplier').value;
+            const mesin = document.getElementById('mesin').value;
+            const counter = document.getElementById('counter').value;
+            const waktuMulai = document.getElementById('waktuMulai').value;
+            
+            const data = JSON.parse(localStorage.getItem('rollData')) || [];
+            
+            // Cari roll aktif di mesin yang sama (waktuHabis kosong)
+            const activeIndex = data.findIndex(item => item.mesin === mesin && !item.waktuHabis);
+            if (activeIndex >= 0) {
+                // Update waktu habis roll sebelumnya
+                data[activeIndex].waktuHabis = waktuMulai;
+            }
+            
+            // Tambah entry baru
+            data.push({ lot, supplier, mesin, counter, waktuMulai, waktuHabis: null });
+            
+            localStorage.setItem('rollData', JSON.stringify(data));
+            
+            // Reset form dan muat ulang data
+            document.getElementById('rollForm').reset();
+            loadData();
+        });
+        
+        // Fungsi edit
+        function editEntry(index) {
+            const data = JSON.parse(localStorage.getItem('rollData')) || [];
+            const item = data[index];
+            document.getElementById('lot').value = item.lot;
+            document.getElementById('supplier').value = item.supplier;
+            document.getElementById('mesin').value = item.mesin;
+            document.getElementById('counter').value = item.counter;
+            document.getElementById('waktuMulai').value = item.waktuMulai;
+            editIndex = index;
+            document.getElementById('submitBtn').textContent = 'Update Catatan';
+        }
+        
+        // Fungsi hapus
+        function deleteEntry(index) {
+            if (confirm('Apakah Anda yakin ingin menghapus catatan ini?')) {
+                const data = JSON.parse(localStorage.getItem('rollData')) || [];
+                data.splice(index, 1);
+                localStorage.setItem('rollData', JSON.stringify(data));
+                loadData();
+            }
+        }
+        
+        // Fungsi export ke CSV
+        function exportToCSV() {
+            const data = JSON.parse(localStorage.getItem('rollData')) || [];
+            if (data.length === 0) {
+                alert('Tidak ada data untuk diekspor.');
+                return;
+            }
+            let csv = 'Lot,Supplier,Mesin,Counter Ganti Roll,Waktu Mulai,Waktu Habis,Durasi (Jam)\n';
+            data.forEach(item => {
+                const durasi = calculateDuration(item.waktuMulai, item.waktuHabis);
+                csv += `${item.lot},${item.supplier},${item.mesin},${item.counter},${item.waktuMulai},${item.waktuHabis || ''},${durasi}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('hidden', '');
+            a.setAttribute('href', url);
+            a.setAttribute('download', 'catatan_roll.csv');
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+        
+        // Fungsi untuk update grafik
+        function updateCharts(data) {
+            // Grafik per Mesin
+            const mesinUsage = {};
+            data.forEach(item => {
+                if (mesinUsage[item.mesin]) {
+                    mesinUsage[item.mesin] += parseInt(item.counter) || 0;
+                } else {
+                    mesinUsage[item.mesin] = parseInt(item.counter) || 0;
+                }
+            });
+            
+            const ctxMesin = document.getElementById('rollChartMesin').getContext('2d');
+            new Chart(ctxMesin, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(mesinUsage),
+                    datasets: [{
+                        label: 'Counter Ganti Roll',
+                        data: Object.values(mesinUsage),
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+            
+            // Grafik per Supplier
+            const supplierUsage = {};
+            data.forEach(item => {
+                if (supplierUsage[item.supplier]) {
+                    supplierUsage[item.supplier] += parseInt(item.counter) || 0;
+                } else {
+                    supplierUsage[item.supplier] = parseInt(item.counter) || 0;
+                }
+            });
+            
+            const ctxSupplier = document.getElementById('rollChartSupplier').getContext('2d');
+            new Chart(ctxSupplier, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(supplierUsage),
+                    datasets: [{
+                        label: 'Counter Ganti Roll',
+                        data: Object.values(supplierUsage),
+                        backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Muat data saat halaman dimuat (tapi aplikasi belum ditampilkan)
+        // loadData() dipanggil saat enterApp()
+    </script>
+</body>
+</html>
